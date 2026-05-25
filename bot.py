@@ -1,4 +1,4 @@
-﻿import random
+import random
 import sqlite3
 from datetime import datetime, timedelta
 import telebot
@@ -46,11 +46,26 @@ def handle_messages(message):
         chosen_rarity = random.choices(list(PLANTS_BY_RARITY.keys()), weights=[0.55, 0.25, 0.15, 0.05], k=1)[0]
         chosen_plant = random.choice(PLANTS_BY_RARITY[chosen_rarity])
         points = random.randint(RARITY_POINTS_CONFIG[chosen_rarity]["min"], RARITY_POINTS_CONFIG[chosen_rarity]["max"])
-        got_fertilizer = 1 if random.random() < 0.20 else 0
         new_next_grow = (datetime.now() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
-        cursor.execute("UPDATE users SET plants_count = plants_count + 1, points = points + ?, fertilizers = fertilizers + ?, next_grow = ? WHERE user_id = ?", (points, got_fertilizer, new_next_grow, user_id))
+        cursor.execute("UPDATE users SET plants_count = plants_count + 1, points = points + ?, next_grow = ? WHERE user_id = ?", (points, new_next_grow, user_id))
         conn.commit()
-        bot.send_message(message.chat.id, f"🌱 **Вы вырастили Растение Досика** 🌱\n\n🪴 **Вы вырастили** {chosen_plant}\n💥 **Редкость:** {chosen_rarity}\n🌀 **Очки:** +{points}" + ("\n🍁 **Найдено удобрение!**" if got_fertilizer else "") + "\n\n🌳 Следующий раз через час", parse_mode="Markdown")
+        bot.send_message(message.chat.id, f"🌱 **Вы вырастили Растение Досика** 🌱\n\n🪴 **Вы вырастили:** {chosen_plant}\n💥 **Редкость:** {chosen_rarity}\n🌀 **Очки:** +{points}\n\n🌳 Следующий раз через час", parse_mode="Markdown")
+    elif text in ["удобрить", "/fertilize"]:
+        if not user[7] or datetime.now() >= datetime.strptime(user[7], "%Y-%m-%d %H:%M:%S"):
+            bot.send_message(message.chat.id, "❌ Грядка пуста, запустите Растун!")
+            return
+        if user[6] <= 0:
+            bot.send_message(message.chat.id, "❌ У вас нет удобрений! Купите в ДМагазин")
+            return
+        next_grow = datetime.strptime(user[7], "%Y-%m-%d %H:%M:%S")
+        if (next_grow - datetime.now()).total_seconds() <= 1800:
+            bot.send_message(message.chat.id, "❌ Удобрение уже было применено на это растение!")
+            return
+        acc_grow = (next_grow - timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("UPDATE users SET fertilizers = fertilizers - 1, next_grow = ? WHERE user_id = ?", (acc_grow, user_id))
+        conn.commit()
+        rem = int((datetime.strptime(acc_grow, "%Y-%m-%d %H:%M:%S") - datetime.now()).total_seconds() // 60)
+        bot.send_message(message.chat.id, f"🍁 **Удобрено!** Время сокращено на 50%.\n⏳ Осталось: {rem} мин.", parse_mode="Markdown")
     elif text in ["дпрофиль", "/dpro"]:
         y, m, w = calculate_time_spent(user[3])
         bot.send_message(message.chat.id, f"👨‍🌾 **САДОВОД** {user[1]} 👨‍🌾\n\n📃 Описание: {user[2]}\nВремя: Год {y}, Месяц {m}, Недели {w}\n\n🌿 Растений: {user[4]}\n🪙 Очков: {user[5]}\n🍂 Удобрений: {user[6]}", parse_mode="Markdown")
@@ -85,5 +100,5 @@ def handle_callbacks(call):
         res = "\\n".join(f"{idx}. **{r[0]}** — {r[1]}" for idx, r in enumerate(all_u, 1))
         kb = InlineKeyboardMarkup().add(InlineKeyboardButton("Показать еще 10", callback_data=f"top_{col}_{off+10}"))
         bot.edit_message_text(f"🏆 **Топ** 🏆\n\n{res}", call.message.chat.id, call.message.message_id, reply_markup=kb, parse_mode="Markdown")
-print("⚡ БОТ-САДОВОД ПОЛНОСТЬЮ И СТАБИЛЬНО ЗАПУЩЕН!")
+print("⚡ БОТ-САДОВОД ОБНОВЛЕН С КОМАНДОЙ УДОБРИТЬ!")
 bot.infinity_polling()
